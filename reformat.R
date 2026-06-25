@@ -23,6 +23,8 @@ sbat_list <- lapply(sonobat_txt_files, function(x) {
 #nabat_temp <- read_csv(nabat_temp_file)
 
 # Reformat any fields necessary to conform to NABat template
+## Cleanup TODO: allow for no year to be supplied
+## Cleanup TODO: replace species list if !is.na for both auto and manual ID
 
 clean_ts <- function(timestamp, year, verbose = FALSE) {
     # Remove GMT offset
@@ -48,7 +50,7 @@ clean_ts <- function(timestamp, year, verbose = FALSE) {
     return(char_date)
 }
 
-create_nabat_data <- function(sonobat_df, year, verbose = FALSE) {
+create_nabat_data <- function(sonobat_df, year, spec_list, verbose = FALSE) {
     nabat_cols <- c("| GRTS Cell Id", "Surveyor(s)", "Latitude", "Longitude",
                     "Site Name", "Survey Start Time", "Survey End Time",
                     "Unusual Occurrences", "Significant Weather Event",
@@ -73,12 +75,12 @@ create_nabat_data <- function(sonobat_df, year, verbose = FALSE) {
                                             year, verbose),
                `Unusual Occurrences` = `NABat|Unusual Occurrences`,
                `Significant Weather Event` = `User|Significant Weather Event`,
-               `Auto Id Software` = `NABat|Auto ID Software`,
+               `Auto Id Software` = "SonoBat 30.2.x",
                `Auto Id` = `SB|Species Auto ID verbose`,
                `Manual Id` = `Species Manual ID`,
                `Manual Id Vetter` = gsub(",", " ", `NABat|Vetter`),
-               `Name of Species List for Auto Id` = `NABat|Name of Species List for Auto ID`,
-               `Name of Species List for Manual Id` = `NABat|Name of Species List for Manual ID`,
+               `Name of Species List for Auto Id` = spec_list,
+               `Name of Species List for Manual Id` = NA,
                `Audio Recording Name` = Filename,
                `Audio Recording Time` = Timestamp,
                `Detector Model` = `NABat|Detector Model`,
@@ -88,4 +90,26 @@ create_nabat_data <- function(sonobat_df, year, verbose = FALSE) {
                `Microphone Orientation` = "backward"
                ) %>%
         select(all_of(nabat_cols))
+    
+    nbdf[is.na(nbdf)] <- ""
+    
+    return(nbdf)
+}
+
+year <- 2025
+grid_id <- "113851"
+spec_list <- "PUGET_SOUND_MOBILE_SONOBAT_PACNW-JEFFERSON_WEST_WA[20250526]"
+
+nb_list <- lapply(sbat_list, function(x) create_nabat_data(x, year, spec_list,
+                                                           verbose = FALSE))
+
+# Save to CSVs
+out_csv_dir <- file.path(getwd(), "out_csv", "2025")
+
+for (i in seq_along(nb_list)) {
+    fname <- names(nb_list)[i] |>
+        gsub(pattern = "Session", replacement = paste0(grid_id, "_Mobile")) |>
+        gsub(pattern = "-Attributed.txt", replacement = ".csv")
+    
+    write_csv(nb_list[[i]], file.path(out_csv_dir, fname))
 }
