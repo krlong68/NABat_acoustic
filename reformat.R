@@ -1,16 +1,37 @@
+# reformat.R
+# Usage: see README.md
+
+# Library imports
+
 # general data handling
 library(dplyr)
 library(readr)
-#library(tidyr)
 
 # date-time handling
 library(lubridate)
-#library(hms)
 
+#---------------------
+# EDIT THESE VARIABLES
+#---------------------
+
+# Set the working directory to the parent directory of this script
 setwd("/home/kaelyn/Desktop/Bats_NW/NABat_acoustic")
 
+# Year the survey was performed
+year <- "2025"
+
+# ID of the grid the survey was performed in
+grid_id <- "113851"
+
+# Species list used for both automatic and manual species identification
+spec_list <- "PUGET_SOUND_MOBILE_SONOBAT_PACNW-JEFFERSON_WEST_WA[20250526]"
+
+#-------------
+# STOP EDITING
+#-------------
+
 # Load in TXT files
-sonobat_txt_dir <- file.path(getwd(), "sonobat_txt", "2025")
+sonobat_txt_dir <- file.path(getwd(), "sonobat_txt", year, grid_id)
 sonobat_txt_files <- list.files(sonobat_txt_dir, full.names = TRUE)
 
 sbat_list <- lapply(sonobat_txt_files, function(x) {
@@ -18,14 +39,9 @@ sbat_list <- lapply(sonobat_txt_files, function(x) {
 }) |>
     setNames(basename(sonobat_txt_files))
 
-# Load in NABat template
-#nabat_temp_file <- file.path(getwd(), "Bulk_Mobile_Acoustic_Full_Template.csv")
-#nabat_temp <- read_csv(nabat_temp_file)
-
-# Reformat any fields necessary to conform to NABat template
-## Cleanup TODO: allow for no year to be supplied
-## Cleanup TODO: replace species list if !is.na for both auto and manual ID
-
+# Clean the timestamp:
+# Remove GMT offset
+# Confirm that the year matches the supplied year
 clean_ts <- function(timestamp, year, verbose = FALSE) {
     # Remove GMT offset
     sub_ts <- gsub("-[0-9]{1,2}?:[0-9]{1,2}?$", "", timestamp)
@@ -50,7 +66,9 @@ clean_ts <- function(timestamp, year, verbose = FALSE) {
     return(char_date)
 }
 
+# Format metadata according to the NABat-supplied template
 create_nabat_data <- function(sonobat_df, year, spec_list, verbose = FALSE) {
+    # List all columns present in NABat template
     nabat_cols <- c("| GRTS Cell Id", "Surveyor(s)", "Latitude", "Longitude",
                     "Site Name", "Survey Start Time", "Survey End Time",
                     "Unusual Occurrences", "Significant Weather Event",
@@ -62,6 +80,14 @@ create_nabat_data <- function(sonobat_df, year, spec_list, verbose = FALSE) {
                     "Microphone Model", "Microphone Serial Number", 
                     "Microphone Orientation")
     
+    # Fill each column with the appropriate information
+    # Most columns are filled from Sonobat TXT files
+    # Some columns are filled with predetermined values
+        # Auto Id Software, Microphone Model, Microphone Orientation
+    # Some columns are filled with user-defined values
+        # Name of Species List for Auto Id, Name of Species List for Manual Id 
+    # Some columns are purposely left as NA
+        # | GRTS Cell Id, Latitude, Longitude, Microphone Serial Number
     nbdf <- sonobat_df %>%
         rowwise() %>%
         mutate(`| GRTS Cell Id` = NA,
@@ -78,7 +104,7 @@ create_nabat_data <- function(sonobat_df, year, spec_list, verbose = FALSE) {
                `Auto Id Software` = "SonoBat 30.2.x",
                `Auto Id` = `SB|Species Auto ID verbose`,
                `Manual Id` = `Species Manual ID`,
-               `Manual Id Vetter` = gsub(",", " ", `NABat|Vetter`),
+               `Manual Id Vetter` = gsub(",", "_", `NABat|Vetter`),
                `Name of Species List for Auto Id` = if_else(!is.na(`Auto Id`), spec_list, NA),
                `Name of Species List for Manual Id` = if_else(!is.na(`Manual Id`), spec_list, NA),
                `Audio Recording Name` = Filename,
@@ -91,26 +117,31 @@ create_nabat_data <- function(sonobat_df, year, spec_list, verbose = FALSE) {
                ) %>%
         select(all_of(nabat_cols))
     
+    # Replace NA with the empty string "" and return
     nbdf[is.na(nbdf)] <- ""
     
     return(nbdf)
 }
 
-year <- 2025
-grid_id <- "113851"
-spec_list <- "PUGET_SOUND_MOBILE_SONOBAT_PACNW-JEFFERSON_WEST_WA[20250526]"
+# Format user-inputted year as numeric for timestamp comparison
+num_year <- as.numeric(year)
 
-nb_list <- lapply(sbat_list, function(x) create_nabat_data(x, year, spec_list,
+# Run formatting function on all loaded Sonobat data
+nb_list <- lapply(sbat_list, function(x) create_nabat_data(x, num_year,
+                                                           spec_list,
                                                            verbose = FALSE))
 
 # Save to CSVs
-out_csv_dir <- file.path(getwd(), "out_csv", "2025")
+# Set output directory
+out_csv_dir <- file.path(getwd(), "out_csv", year, grid_id)
 
 for (i in seq_along(nb_list)) {
+    # Set output file name according to NABat standards
     fname <- names(nb_list)[i] |>
         gsub(pattern = "Session", replacement = paste0(grid_id, "_Mobile")) |>
         gsub(pattern = "-Attributed.txt", replacement = ".csv")
     
+    # Write output file
     write_csv(nb_list[[i]], file.path(out_csv_dir, fname))
 }
 
