@@ -79,8 +79,8 @@ create_nabat_data <- function(sonobat_df, year, spec_list, verbose = FALSE) {
                `Auto Id` = `SB|Species Auto ID verbose`,
                `Manual Id` = `Species Manual ID`,
                `Manual Id Vetter` = gsub(",", " ", `NABat|Vetter`),
-               `Name of Species List for Auto Id` = spec_list,
-               `Name of Species List for Manual Id` = NA,
+               `Name of Species List for Auto Id` = if_else(!is.na(`Auto Id`), spec_list, NA),
+               `Name of Species List for Manual Id` = if_else(!is.na(`Manual Id`), spec_list, NA),
                `Audio Recording Name` = Filename,
                `Audio Recording Time` = Timestamp,
                `Detector Model` = `NABat|Detector Model`,
@@ -113,3 +113,4 @@ for (i in seq_along(nb_list)) {
     
     write_csv(nb_list[[i]], file.path(out_csv_dir, fname))
 }
+
