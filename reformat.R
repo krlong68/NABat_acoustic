@@ -116,8 +116,10 @@ check_dates <- function(df, year) {
         df_errors <- c(df_errors, row_errors)
     }
     
-    # Add errors to dataframe and return
-    df$errors <- df_errors
+    # Add any errors to dataframe and return
+    if (any(!is.na(df_errors))) {
+        df$Errors <- df_errors
+    }
     
     return(df)
 }
@@ -192,11 +194,18 @@ checked_list <- lapply(nb_list, function(x) check_dates(x, num_year))
 # Set output directory
 out_csv_dir <- file.path(getwd(), "out_csv", year, grid_id)
 
-for (i in seq_along(nb_list)) {
+for (i in seq_along(checked_list)) {
     # Set output file name according to NABat standards
-    fname <- names(nb_list)[i] |>
+    fname <- names(checked_list)[i] |>
         gsub(pattern = "Session", replacement = paste0(grid_id, "_Mobile")) |>
         gsub(pattern = "-Attributed.txt", replacement = ".csv")
+    
+    # Flag errors in filename and printed to console
+    if ("Errors" %in% colnames(checked_list[[i]])) {
+        fname <- paste0("Errors_", fname)
+        print(paste0("Date-related errors found in ", names(checked_list)[i],
+              ", see output 'Errors' file for details."))
+    }
     
     # Write output file
     write_csv(nb_list[[i]], file.path(out_csv_dir, fname))
