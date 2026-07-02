@@ -39,35 +39,91 @@ sbat_list <- lapply(sonobat_txt_files, function(x) {
 }) |>
     setNames(basename(sonobat_txt_files))
 
-# Clean the timestamp:
-# Remove GMT offset
-# Confirm that the year matches the supplied year
-clean_ts <- function(timestamp, year, verbose = FALSE) {
-    # Remove GMT offset
-    sub_ts <- gsub("-[0-9]{1,2}?:[0-9]{1,2}?$", "", timestamp)
-    
-    # Convert value to POSIXct
-    parsed <- parse_date_time(sub_ts, "YmdHMS")
+# Clean the timestamp by removing GMT offset
+#clean_ts <- function(timestamp) {
+#    # Remove GMT offset
+#    sub_ts <- gsub("-[0-9]{1,2}?:[0-9]{1,2}?$", "", timestamp)
+#    
+#    # Convert value to POSIXct
+#    parsed <- parse_date_time(sub_ts, "YmdHMS")
+#    
+#    # Convert POSIXct to character value and return
+#    char_date <- format_ISO8601(parsed)
+#    
+#    return(char_date)
+#}
 
-    # Check that the year is correct
-    if (year(parsed) != year) {
-        old_year <- year(parsed)
-        year(parsed) <- year
+# Check all date-time columns to confirm they are reasonable
+# Survey Start Time, Survey End Time, Audio Recording Time
+check_dates <- function(df, year) {
+    # Initialize full dataframe error storage
+    df_errors <- c()
+    
+    for (i in seq_len(nrow(df))) {
+        cur_row <- df[i,]
         
-        if (verbose) {
-            message("Year should be ", year, " but is ", old_year,
-                    ". Value will be corrected.")
+        # Convert relevant values to POSIXct
+        parsed_ts <- parse_date_time(cur_row$`Audio Recording Time`, c("mdYHM", "YmdHMSz"))
+        parsed_start <- parse_date_time(cur_row$`Survey Start Time`, "YmdHMS")
+        parsed_end <- parse_date_time(cur_row$`Survey End Time`, "YmdHMS")
+        
+        # Initialize row error storage
+        errors <- c()
+        
+        # Check that all times occur within the provided year
+        if (year(parsed_ts) != year) {
+            errors <- c(errors,
+                        "Recording timestamp does not occur within the provided year")
         }
+        
+        if (year(parsed_start) != year) {
+            errors <- c(errors,
+                        "Survey start does not occur within the provided year")
+        }
+        
+        if (year(parsed_end) != year) {
+            errors <- c(errors,
+                        "Survey end does not occur within the provided year")
+        }
+        
+        # Check that all times are on the same date
+        if (date(parsed_end) != date(parsed_start)) {
+            errors <- c(errors,
+                        "Survey end is not on the same date as survey start")
+        }
+        
+        if (date(parsed_ts) != date(parsed_start)) {
+            errors <- c(errors,
+                        "Recording timestamp is not on the same date as the survey")
+        }
+        
+        if ((parsed_end - parsed_start) < 0) {
+            errors <- c(errors,
+                        "Survey end occurs before survey start")
+        }
+        
+        # Check that all times are in the correct order
+        survey_interval <- interval(parsed_start, parsed_end)
+        
+        if (!parsed_ts %within% survey_interval) {
+            errors <- c(errors,
+                        "Recording timestamp does not occur within the survey interval")
+        }
+        
+        # Save errors
+        row_errors <- paste(errors, collapse = ";")
+        if (row_errors == "") { row_errors <- NA }
+        df_errors <- c(df_errors, row_errors)
     }
     
-    # Convert POSIXct to character value and return
-    char_date <- format_ISO8601(parsed)
+    # Add errors to dataframe and return
+    df$errors <- df_errors
     
-    return(char_date)
+    return(df)
 }
 
 # Format metadata according to the NABat-supplied template
-create_nabat_data <- function(sonobat_df, year, spec_list, verbose = FALSE) {
+create_nabat_data <- function(sonobat_df, spec_list) {
     # List all columns present in NABat template
     nabat_cols <- c("| GRTS Cell Id", "Surveyor(s)", "Latitude", "Longitude",
                     "Site Name", "Survey Start Time", "Survey End Time",
@@ -92,13 +148,13 @@ create_nabat_data <- function(sonobat_df, year, spec_list, verbose = FALSE) {
         rowwise() %>%
         mutate(`| GRTS Cell Id` = NA,
                `Surveyor(s)` = gsub(",", " ", `NABat|Surveyor`),
-               Latitude = NA,
-               Longitude = NA,
+               Latitude = strsplit(Lat, " ")[[1]][1],
+               Longitude = strsplit(Lat, " ")[[1]][2],
                `Site Name` = `NABat|Site Name`,
-               `Survey Start Time` = clean_ts(`NABat|Start Time`,
-                                              year, verbose),
-               `Survey End Time` = clean_ts(`NABat|End Time`,
-                                            year, verbose),
+               `Survey Start Time` = gsub("-[0-9]{1,2}?:[0-9]{1,2}?$", "",
+                                          `NABat|Start Time`),
+               `Survey End Time` = gsub("-[0-9]{1,2}?:[0-9]{1,2}?$", "",
+                                        `NABat|End Time`),
                `Unusual Occurrences` = `NABat|Unusual Occurrences`,
                `Significant Weather Event` = `User|Significant Weather Event`,
                `Auto Id Software` = "SonoBat 30.2.x",
@@ -123,13 +179,14 @@ create_nabat_data <- function(sonobat_df, year, spec_list, verbose = FALSE) {
     return(nbdf)
 }
 
+# Run formatting function on all loaded Sonobat data
+nb_list <- lapply(sbat_list, function(x) create_nabat_data(x, spec_list))
+
 # Format user-inputted year as numeric for timestamp comparison
 num_year <- as.numeric(year)
 
-# Run formatting function on all loaded Sonobat data
-nb_list <- lapply(sbat_list, function(x) create_nabat_data(x, num_year,
-                                                           spec_list,
-                                                           verbose = FALSE))
+# Check for unreasonable dates
+checked_list <- lapply(nb_list, function(x) check_dates(x, num_year))
 
 # Save to CSVs
 # Set output directory
