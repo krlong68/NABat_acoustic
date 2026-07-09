@@ -39,20 +39,6 @@ sbat_list <- lapply(sonobat_txt_files, function(x) {
 }) |>
     setNames(basename(sonobat_txt_files))
 
-# Clean the timestamp by removing GMT offset
-#clean_ts <- function(timestamp) {
-#    # Remove GMT offset
-#    sub_ts <- gsub("-[0-9]{1,2}?:[0-9]{1,2}?$", "", timestamp)
-#    
-#    # Convert value to POSIXct
-#    parsed <- parse_date_time(sub_ts, "YmdHMS")
-#    
-#    # Convert POSIXct to character value and return
-#    char_date <- format_ISO8601(parsed)
-#    
-#    return(char_date)
-#}
-
 # Check all date-time columns to confirm they are reasonable
 # Survey Start Time, Survey End Time, Audio Recording Time
 check_dates <- function(df, year) {
@@ -145,7 +131,7 @@ create_nabat_data <- function(sonobat_df, spec_list) {
     # Some columns are filled with user-defined values
         # Name of Species List for Auto Id, Name of Species List for Manual Id 
     # Some columns are purposely left as NA
-        # | GRTS Cell Id, Latitude, Longitude, Microphone Serial Number
+        # | GRTS Cell Id, Microphone Serial Number
     nbdf <- sonobat_df %>%
         rowwise() %>%
         mutate(`| GRTS Cell Id` = NA,
@@ -208,6 +194,6 @@ for (i in seq_along(checked_list)) {
     }
     
     # Write output file
-    write_csv(nb_list[[i]], file.path(out_csv_dir, fname))
+    write_csv(checked_list[[i]], file.path(out_csv_dir, fname))
 }
 
