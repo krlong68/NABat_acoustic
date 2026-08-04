@@ -18,10 +18,10 @@ library(lubridate)
 setwd("/home/kaelyn/Desktop/Bats_NW/NABat_acoustic")
 
 # Year the survey was performed
-year <- "2025"
+year <- "2026"
 
 # ID of the grid the survey was performed in
-grid_id <- "113851"
+grid_id <- "13761"
 
 # Species list used for both automatic and manual species identification
 spec_list <- "PUGET_SOUND_MOBILE_SONOBAT_PACNW-JEFFERSON_WEST_WA[20250526]"
@@ -49,7 +49,8 @@ check_dates <- function(df, year) {
         cur_row <- df[i,]
         
         # Convert relevant values to POSIXct
-        parsed_ts <- parse_date_time(cur_row$`Audio Recording Time`, c("mdYHM", "YmdHMSz"))
+        strip_ts <- gsub("-[0-9]{1,2}?[0-9]{1,2}?$", "", cur_row$`Audio Recording Time`)
+        parsed_ts <- parse_date_time(strip_ts, c("mdYHM", "YmdHMS"))
         parsed_start <- parse_date_time(cur_row$`Survey Start Time`, "YmdHMS")
         parsed_end <- parse_date_time(cur_row$`Survey End Time`, "YmdHMS")
         
@@ -136,8 +137,8 @@ create_nabat_data <- function(sonobat_df, spec_list) {
         rowwise() %>%
         mutate(`| GRTS Cell Id` = NA,
                `Surveyor(s)` = gsub(",", " ", `NABat|Surveyor`),
-               Latitude = strsplit(Lat, " ")[[1]][1],
-               Longitude = strsplit(Lat, " ")[[1]][2],
+               Latitude = NA, #strsplit(Lat, " ")[[1]][1],
+               Longitude = NA, #strsplit(Lat, " ")[[1]][2],
                `Site Name` = `NABat|Site Name`,
                `Survey Start Time` = gsub("-[0-9]{1,2}?:[0-9]{1,2}?$", "",
                                           `NABat|Start Time`),
